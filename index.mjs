@@ -36,6 +36,9 @@ const PERM = cfg.permissionMode || "acceptEdits";   // read-only | acceptEdits(=
 const AGENT = (cfg.agent || "claude").toLowerCase(); // claude | codex
 const CLAUDE_BIN = cfg.claudeBin || "claude";
 const CODEX_BIN = cfg.codexBin || "codex";
+// 模型：Claude 默认钉 opus(=最新最强 Opus 4.8)，免得 headless 默认成更轻的模型显得"呆"。
+// Codex 不默认指定(用它自己的默认)。config 里写 model 可覆盖。
+const MODEL = cfg.model || (AGENT === "codex" ? "" : "opus");
 if (!cfg.appId || !cfg.appSecret || cfg.appSecret === "PASTE_APP_SECRET_HERE") {
   console.error("[配置错误] appId / appSecret 必填");
   process.exit(1);
@@ -138,6 +141,7 @@ function streamLines(child, handleLine, onClose) {
 function runClaude(prompt, chatId, onUpdate, imagePath) {
   return new Promise((resolve) => {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", PERM, "--add-dir", VAULT, MEDIA_DIR];
+    if (MODEL) args.push("--model", MODEL);
     const prev = sessions.get(chatId);
     if (prev) args.push("--resume", prev);
     const child = spawn(CLAUDE_BIN, args, { cwd: VAULT, env: process.env });
@@ -177,6 +181,7 @@ function runCodex(prompt, chatId, onUpdate, imagePath) {
       : PERM === "full" ? ["--dangerously-bypass-approvals-and-sandbox"]
       : ["--sandbox", "workspace-write"];
     const flags = ["--json", "--skip-git-repo-check", "-C", VAULT, "--add-dir", MEDIA_DIR, ...sandboxFlags];
+    if (MODEL) flags.push("-m", MODEL);
     if (imagePath) flags.push("-i", imagePath);
     const prev = sessions.get(chatId);
     // prompt 走参数（codex exec 的 stdin 会挂；cross-spawn 无 shell，参数传递安全）
