@@ -44,6 +44,25 @@ function saveCfg() {
   writeFileSync(CFG_PATH, JSON.stringify(cfg, null, 2), "utf8");
 }
 
+// 单实例锁：同一个飞书 app 只允许一个实例在跑（防重复双击/自启+手动叠加导致多连接抢同一 app）
+const CFG_DIR = dirname(CFG_PATH);
+const LOCK = join(CFG_DIR, `.lock-${cfg.appId}`);
+function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } }
+if (existsSync(LOCK)) {
+  const old = parseInt(String(readFileSync(LOCK, "utf8")).trim(), 10);
+  if (old && pidAlive(old)) {
+    console.error(`[已在运行] app ${cfg.appId} 已有实例(PID ${old})在跑，本次退出。`);
+    process.exit(0);
+  }
+}
+writeFileSync(LOCK, String(process.pid), "utf8");
+function releaseLock() {
+  try { if (existsSync(LOCK) && String(readFileSync(LOCK, "utf8")).trim() === String(process.pid)) rmSync(LOCK, { force: true }); } catch {}
+}
+process.on("exit", releaseLock);
+process.on("SIGINT", () => { releaseLock(); process.exit(0); });
+process.on("SIGTERM", () => { releaseLock(); process.exit(0); });
+
 // ---------- 飞书客户端 ----------
 const client = new Lark.Client({ appId: cfg.appId, appSecret: cfg.appSecret });
 const wsClient = new Lark.WSClient({ appId: cfg.appId, appSecret: cfg.appSecret });
