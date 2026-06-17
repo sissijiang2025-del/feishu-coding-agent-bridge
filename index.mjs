@@ -39,6 +39,9 @@ const CODEX_BIN = cfg.codexBin || "codex";
 // 模型：Claude 默认钉 opus(=最新最强 Opus 4.8)，免得 headless 默认成更轻的模型显得"呆"。
 // Codex 不默认指定(用它自己的默认)。config 里写 model 可覆盖。
 const MODEL = cfg.model || (AGENT === "codex" ? "" : "opus");
+// 放行 lark-cli：让 Claude 能无人值守地调用飞书全套(文档/表格/画板/日历/任务/搜索…)。
+// 默认关（公开仓库保守）；在 config 里设 enableLarkCli:true 开启。仅对 claude 生效。
+const LARK_CLI = cfg.enableLarkCli === true && AGENT === "claude";
 if (!cfg.appId || !cfg.appSecret || cfg.appSecret === "PASTE_APP_SECRET_HERE") {
   console.error("[配置错误] appId / appSecret 必填");
   process.exit(1);
@@ -144,6 +147,15 @@ function runClaude(prompt, chatId, onUpdate, imagePath) {
     if (MODEL) args.push("--model", MODEL);
     const prev = sessions.get(chatId);
     if (prev) args.push("--resume", prev);
+    // 定向放行 lark-cli 的"安全域"（处理你自己的内容：文档/表格/画板/日历/任务等），
+    // 故意【不】自动放行 im(消息收发/搜索) 和 mail(发邮件)——那些要"你触发/单次授权"，
+    // 不能让无人值守的 bot 自己干（符合机主红线）。
+    if (LARK_CLI) {
+      const safeDomains = ["docs", "sheets", "base", "calendar", "task", "whiteboard", "slides", "wiki", "minutes", "drive", "contact", "okr", "vc"];
+      const allow = safeDomains.map((d) => `Bash(lark-cli ${d}:*)`);
+      allow.push("Skill");
+      args.push("--allowedTools", ...allow);
+    }
     const child = spawn(CLAUDE_BIN, args, { cwd: VAULT, env: process.env });
 
     // 图片：claude 用 Read 工具看本地路径
