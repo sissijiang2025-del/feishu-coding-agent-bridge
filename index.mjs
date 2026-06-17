@@ -14,7 +14,7 @@
 
 import * as Lark from "@larksuiteoapi/node-sdk";
 import spawn from "cross-spawn";   // 跨平台安全 spawn：正确处理 Windows 的 .cmd/.ps1，无需 shell:true
-import { readFileSync, writeFileSync, existsSync, mkdirSync, createWriteStream, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, createWriteStream, rmSync, appendFileSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -68,6 +68,15 @@ function releaseLock() {
 process.on("exit", releaseLock);
 process.on("SIGINT", () => { releaseLock(); process.exit(0); });
 process.on("SIGTERM", () => { releaseLock(); process.exit(0); });
+// 文件日志：把 console 输出同时写到 cfgDir/bridge-<agent>.log，方便隐藏启动时排障
+const LOG_FILE = join(CFG_DIR, `bridge-${AGENT}.log`);
+const _log = console.log.bind(console), _err = console.error.bind(console);
+function _tee(tag, args) {
+  try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}]${tag} ` + args.map((x) => typeof x === "string" ? x : JSON.stringify(x)).join(" ") + "\n"); } catch {}
+}
+console.log = (...a) => { _log(...a); _tee("", a); };
+console.error = (...a) => { _err(...a); _tee("[ERR]", a); };
+
 // 别让零星的未处理错误（如 WS 断线的 promise 拒绝）直接崩掉常驻进程
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", e?.stack || e));
 process.on("unhandledRejection", (e) => console.error("[unhandledRejection]", e?.stack || e));
