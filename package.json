@@ -1,0 +1,19 @@
+{
+  "name": "feishu-coding-agent-bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "飞书(Lark) <-> 本地 Claude Code / Codex 桥，专为 Windows。直接用官方 Node SDK 进程内收发，绕开 lark-cli.exe 的 Windows 文件权限审计 bug。",
+  "bin": {
+    "feishu-coding-agent-bridge": "index.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.67.0",
+    "cross-spawn": "^7.0.6"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
