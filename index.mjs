@@ -68,6 +68,9 @@ function releaseLock() {
 process.on("exit", releaseLock);
 process.on("SIGINT", () => { releaseLock(); process.exit(0); });
 process.on("SIGTERM", () => { releaseLock(); process.exit(0); });
+// 别让零星的未处理错误（如 WS 断线的 promise 拒绝）直接崩掉常驻进程
+process.on("uncaughtException", (e) => console.error("[uncaughtException]", e?.stack || e));
+process.on("unhandledRejection", (e) => console.error("[unhandledRejection]", e?.stack || e));
 
 // ---------- 飞书客户端 ----------
 const client = new Lark.Client({ appId: cfg.appId, appSecret: cfg.appSecret });
