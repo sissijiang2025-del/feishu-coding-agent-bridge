@@ -52,6 +52,10 @@ const wsClient = new Lark.WSClient({ appId: cfg.appId, appSecret: cfg.appSecret 
 const sessions = new Map();      // chatId -> agent 的会话 id（claude=session_id / codex=thread_id）
 const seenMsgIds = new Set();
 
+// 下载的图片/语音存这里；必须加进 agent 的允许目录白名单，否则 agent 读不到（在库根之外）
+const MEDIA_DIR = join(tmpdir(), "feishu-bridge-media");
+if (!existsSync(MEDIA_DIR)) mkdirSync(MEDIA_DIR, { recursive: true });
+
 // 全局单写队列：任一时刻只跑一个 agent，避免并发改同一目录
 let workChain = Promise.resolve();
 function enqueueWork(fn) {
@@ -114,7 +118,7 @@ function streamLines(child, handleLine, onClose) {
 // ---------- 跑 Claude Code（stream-json）----------
 function runClaude(prompt, chatId, onUpdate, imagePath) {
   return new Promise((resolve) => {
-    const args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", PERM, "--add-dir", VAULT];
+    const args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", PERM, "--add-dir", VAULT, MEDIA_DIR];
     const prev = sessions.get(chatId);
     if (prev) args.push("--resume", prev);
     const child = spawn(CLAUDE_BIN, args, { cwd: VAULT, env: process.env });
@@ -153,7 +157,7 @@ function runCodex(prompt, chatId, onUpdate, imagePath) {
     const sandboxFlags = PERM === "read-only" ? ["--sandbox", "read-only"]
       : PERM === "full" ? ["--dangerously-bypass-approvals-and-sandbox"]
       : ["--sandbox", "workspace-write"];
-    const flags = ["--json", "--skip-git-repo-check", "-C", VAULT, ...sandboxFlags];
+    const flags = ["--json", "--skip-git-repo-check", "-C", VAULT, "--add-dir", MEDIA_DIR, ...sandboxFlags];
     if (imagePath) flags.push("-i", imagePath);
     const prev = sessions.get(chatId);
     // prompt 走参数（codex exec 的 stdin 会挂；cross-spawn 无 shell，参数传递安全）
@@ -185,10 +189,8 @@ const runAgent = AGENT === "codex" ? runCodex : runClaude;
 
 // ---------- 下载图片 ----------
 async function downloadImage(messageId, fileKey) {
-  const dir = join(tmpdir(), "feishu-bridge-imgs");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const safe = String(fileKey).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "img";
-  const dest = join(dir, `${Date.now()}-${randomUUID().slice(0, 8)}-${safe}.png`);
+  const dest = join(MEDIA_DIR, `${Date.now()}-${randomUUID().slice(0, 8)}-${safe}.png`);
   const resp = await client.im.messageResource.get({
     path: { message_id: messageId, file_key: fileKey },
     params: { type: "image" }
