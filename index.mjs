@@ -284,6 +284,21 @@ async function handleText(chatId, text, imagePath) {
   await patchCard(msgId, out, { done: !error, error });
 }
 
+// 从飞书交互卡片里尽力抽取可读文本 + 链接（用于转发进来的卡片，如妙记/文档通知）
+function extractCardText(node, out = []) {
+  if (node == null || typeof node === "string" || typeof node === "number") return out;
+  if (Array.isArray(node)) { for (const x of node) extractCardText(x, out); return out; }
+  if (typeof node === "object") {
+    for (const [k, v] of Object.entries(node)) {
+      if (typeof v === "string") {
+        if (k === "content" || k === "text") out.push(v);
+        else if (/url|href|link/i.test(k)) out.push(v);
+      } else extractCardText(v, out);
+    }
+  }
+  return out;
+}
+
 // ---------- 事件分发 ----------
 const eventDispatcher = new Lark.EventDispatcher({}).register({
   "im.message.receive_v1": async (data) => {
@@ -318,8 +333,15 @@ const eventDispatcher = new Lark.EventDispatcher({}).register({
         const content = c?.content || c?.post?.zh_cn?.content || [];
         for (const para of content) for (const node of para) if (node.text) lines.push(node.text);
         text = lines.join("\n");
+      } else if (type === "interactive") {
+        // 转发进来的卡片（妙记/文档通知等）：抽取文字+链接交给 Claude
+        const c = JSON.parse(message.content || "{}");
+        const parts = [...new Set(extractCardText(c).map((s) => s.trim()).filter(Boolean))];
+        text = parts.join("\n").trim();
+        if (!text) { await sendCard(chatId, "（收到一张卡片，但没抽出可读内容，先忽略了）", { done: true }); return; }
+        text = `[我转发了一张飞书卡片，内容/链接如下，请理解并按需处理（如是妙记/文档/云盘链接，可用 lark-cli 进一步获取）]\n${text}`;
       } else {
-        await sendCard(chatId, `暂不支持的消息类型：${type}（先发文字或图片）`, { error: true });
+        await sendCard(chatId, `（收到一条 ${type} 消息，目前只处理文字/图片/卡片，先忽略了）`, { done: true });
         return;
       }
       if (!text.trim() && !imagePath) return;
