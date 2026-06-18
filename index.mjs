@@ -42,6 +42,9 @@ const MODEL = cfg.model || (AGENT === "codex" ? "" : "opus");
 // 放行 lark-cli：让 Claude 能无人值守地调用飞书全套(文档/表格/画板/日历/任务/搜索…)。
 // 默认关（公开仓库保守）；在 config 里设 enableLarkCli:true 开启。仅对 claude 生效。
 const LARK_CLI = cfg.enableLarkCli === true && AGENT === "claude";
+// 单独的"消息域"开关：放行 lark-cli im(收发/搜消息)。默认关——因为它涉及给别人发消息。
+// 开了之后，发送仍只在你明确指示时发生(bridge 是被动的)；那条指令即你的单次授权。
+const LARK_CLI_IM = cfg.enableLarkCliMessaging === true && LARK_CLI;
 if (!cfg.appId || !cfg.appSecret || cfg.appSecret === "PASTE_APP_SECRET_HERE") {
   console.error("[配置错误] appId / appSecret 必填");
   process.exit(1);
@@ -165,6 +168,7 @@ function runClaude(prompt, chatId, onUpdate, imagePath) {
     if (LARK_CLI) {
       const safeDomains = ["docs", "sheets", "base", "calendar", "task", "whiteboard", "slides", "wiki", "minutes", "drive", "contact", "okr", "vc"];
       const allow = safeDomains.map((d) => `Bash(lark-cli ${d}:*)`);
+      if (LARK_CLI_IM) allow.push("Bash(lark-cli im:*)");   // 消息收发/搜索（你明确指示时才发）
       allow.push("Skill");
       args.push("--allowedTools", ...allow);
     }
