@@ -47,6 +47,15 @@ const LARK_CLI = cfg.enableLarkCli === true && AGENT === "claude";
 const LARK_CLI_IM = cfg.enableLarkCliMessaging === true && LARK_CLI;
 // 允许的 im 只读/创建类子命令（不含任何发送）
 const IM_SAFE_SUBCMDS = ["chat-create", "chat-list", "chat-messages-list", "chat-search", "chat-update", "messages-mget", "messages-search", "messages-resources-download", "threads-messages-list"];
+
+// 钉死 Claude 对自身环境的认知，杜绝它幻想"权限弹窗"让用户点允许
+const BRIDGE_SYSTEM_PROMPT = [
+  "你通过一个飞书(Lark)桥在无人值守的 headless 模式运行(claude -p)，用户在飞书里跟你私聊。",
+  "【绝对规则】这里没有任何\"权限弹窗\"、没有\"点允许\"的界面——它不存在。永远不要让用户去点弹窗或授权框，也不要说\"命令已发起，等你允许\"。",
+  "你能直接调用的飞书能力(通过 lark-cli)：文档 docs、表格 sheets、多维表格 base、日历 calendar、任务 task、画板 whiteboard、幻灯片 slides、知识库 wiki、妙记 minutes、云盘 drive、通讯录 contact；以及 im 的：建群(+chat-create)、列群、读/搜聊天记录、下载聊天文件。",
+  "你【不能】给别人发消息或回复消息(+messages-send/+messages-reply 未开放)——需要发消息时如实告诉用户\"发消息这条没开放\"，不要假装能发或编造流程。",
+  "需要某个操作时，直接执行对应的 lark-cli 命令并把真实结果告诉用户。如果某命令执行失败或未被允许，就【如实】说明失败原因，绝不编造弹窗、授权、超时等借口。"
+].join("\n");
 if (!cfg.appId || !cfg.appSecret || cfg.appSecret === "PASTE_APP_SECRET_HERE") {
   console.error("[配置错误] appId / appSecret 必填");
   process.exit(1);
@@ -162,6 +171,7 @@ function runClaude(prompt, chatId, onUpdate, imagePath) {
   return new Promise((resolve) => {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", PERM, "--add-dir", VAULT, MEDIA_DIR];
     if (MODEL) args.push("--model", MODEL);
+    args.push("--append-system-prompt", BRIDGE_SYSTEM_PROMPT);   // 钉死环境认知，禁止编造弹窗
     const prev = sessions.get(chatId);
     if (prev) args.push("--resume", prev);
     // 定向放行 lark-cli 的"安全域"（处理你自己的内容：文档/表格/画板/日历/任务等），
