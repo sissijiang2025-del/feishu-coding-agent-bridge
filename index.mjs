@@ -42,9 +42,11 @@ const MODEL = cfg.model || (AGENT === "codex" ? "" : "opus");
 // 放行 lark-cli：让 Claude 能无人值守地调用飞书全套(文档/表格/画板/日历/任务/搜索…)。
 // 默认关（公开仓库保守）；在 config 里设 enableLarkCli:true 开启。仅对 claude 生效。
 const LARK_CLI = cfg.enableLarkCli === true && AGENT === "claude";
-// 单独的"消息域"开关：放行 lark-cli im(收发/搜消息)。默认关——因为它涉及给别人发消息。
-// 开了之后，发送仍只在你明确指示时发生(bridge 是被动的)；那条指令即你的单次授权。
+// im "读/建/搜" 开关：放行建群、列群、读聊天、搜消息、下载聊天附件等。
+// 【故意不含】给别人发消息(+messages-send)和回复(+messages-reply)——那是机主明确拒绝的高危项。
 const LARK_CLI_IM = cfg.enableLarkCliMessaging === true && LARK_CLI;
+// 允许的 im 只读/创建类子命令（不含任何发送）
+const IM_SAFE_SUBCMDS = ["chat-create", "chat-list", "chat-messages-list", "chat-search", "chat-update", "messages-mget", "messages-search", "messages-resources-download", "threads-messages-list"];
 if (!cfg.appId || !cfg.appSecret || cfg.appSecret === "PASTE_APP_SECRET_HERE") {
   console.error("[配置错误] appId / appSecret 必填");
   process.exit(1);
@@ -168,7 +170,8 @@ function runClaude(prompt, chatId, onUpdate, imagePath) {
     if (LARK_CLI) {
       const safeDomains = ["docs", "sheets", "base", "calendar", "task", "whiteboard", "slides", "wiki", "minutes", "drive", "contact", "okr", "vc"];
       const allow = safeDomains.map((d) => `Bash(lark-cli ${d}:*)`);
-      if (LARK_CLI_IM) allow.push("Bash(lark-cli im:*)");   // 消息收发/搜索（你明确指示时才发）
+      // im 只放行读/建/搜的具体子命令，不放 +messages-send / +messages-reply（不让自动给别人发消息）
+      if (LARK_CLI_IM) for (const sc of IM_SAFE_SUBCMDS) allow.push(`Bash(lark-cli im +${sc}:*)`);
       allow.push("Skill");
       args.push("--allowedTools", ...allow);
     }
