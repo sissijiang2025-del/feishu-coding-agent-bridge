@@ -23,6 +23,15 @@
 - 回复用飞书交互卡片，边生成边更新，完成时定稿。
 - 支持两种 agent：**Claude Code** 和 **Codex**（`config.agent` 切换）。
 
+## 功能 / Features
+
+- **卡片流式**：文字 + **工具调用实时上卡**（`🔧 运行 lark-cli…` / `📖 读 …` / `✏️ 改 …` 一行行冒），长任务不再像卡死。
+- **会话连续**：每个飞书会话各自保持 agent 会话（Claude session / Codex thread），上下文接得上；`/new`（或"新会话"）清空重开。
+- **`/stop` 中断**：发 `/stop`（或"停"）随时打断当前任务——**它在入队前即时处理，绕开串行队列**，卡住时也能救。
+- **超时看门狗**：单次运行空闲 `idleTimeoutSec`（默认 300s）无输出、或总时长超 `maxRunSec`（默认 1200s），自动停止，避免一个卡住的 run 冻结整个 bot。
+- **图片 / 文件直发**：图片、Word/PDF/Excel 等附件直接发给 bot，本地下载后交给 agent 读（Office zip 会提示解压 XML）。
+- **lark-cli 全家桶**（Claude，`enableLarkCli:true`）：文档 / 表格 / 多维表格 / 日历 / 任务 / 画板 / 幻灯片 / 知识库 / 妙记 / 云盘 / 通讯录等，直接在飞书里指挥。
+
 ## 安全模型 / Security model
 
 - **只服务机主一人**：第一个**私聊** bot 的人被记为 `owner`（群聊不能抢占）；之后只服务 owner，其他人静默忽略。
@@ -48,18 +57,23 @@ npm install
   "appSecret": "你的 App Secret（飞书开放平台 → 该应用 → 凭证与基础信息）",
   "vault": "C:/path/to/your/working-dir",
   "agent": "claude",
-  "permissionMode": "acceptEdits",
+  "permissionMode": "full",
   "owner": null,
   "claudeBin": "claude",
-  "codexBin": "codex"
+  "codexBin": "codex",
+  "idleTimeoutSec": 300,
+  "maxRunSec": 1200
 }
 ```
 
 - `agent`：`"claude"` 或 `"codex"`。
 - `vault`：agent 的工作目录（Windows 路径用正斜杠最省事）。
-- `permissionMode`：`read-only` | `acceptEdits`（=workspace 写） | `full`。
-  - Claude 映射到 `--permission-mode`；Codex 映射到 `--sandbox`（read-only / workspace-write / 完全放开）。
+- `permissionMode`：`read-only` | `acceptEdits`（=workspace 写） | `full`（默认）。
+  - Claude 映射到 `--permission-mode`：`full` = `bypassPermissions`（**完全不设权限闸，最流畅**）；`acceptEdits` = 自动接受编辑 + 仅在此档启用 lark-cli 白名单；`read-only` = `plan`。
+  - Codex 映射到 `--sandbox`（read-only / workspace-write / 完全放开）。
+  - ⚠️ `full` 无人值守、无审批地执行任意命令——只在**单机主、你信任自己不叫它干坏事**的前提下用；红线（不主动替你对外发消息/邮件）靠 system prompt 规范守。想要审批感就用 `acceptEdits`。
 - `owner`：留 `null`，第一条私聊自动认主。
+- `idleTimeoutSec` / `maxRunSec`：超时看门狗阈值（秒），可省略用默认。
 
 ## 跑两个 bot（Claude + Codex）/ Running both
 
